@@ -1,7 +1,7 @@
 import { Controller, Post, Body, Param } from '@nestjs/common';
 import { CouponsService } from './coupons.service';
-import { CreateCouponBookDto } from './dto/create-coupon-book.dto';
-import { AssignCouponDto } from './dto/assign-coupon.dto';
+import { CreateCouponBookDto } from '../dtos/coupons/create-coupon-book.dto';
+import { AssignCouponDto } from '../dtos/coupons/assign-coupon.dto';
 
 @Controller('coupons')
 export class CouponsController {

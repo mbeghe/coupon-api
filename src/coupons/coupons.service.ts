@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
-import { CouponBook } from './entities/coupon-book.entity';
-import { Coupon, CouponStatus } from './entities/coupon.entity';
-import { CreateCouponBookDto } from './dto/create-coupon-book.dto';
-import { AssignCouponDto } from './dto/assign-coupon.dto';
+import { CouponBook } from '../entities/coupons/coupon-book.entity';
+import { Coupon, CouponStatus } from '../entities/coupons/coupon.entity';
+import { CreateCouponBookDto } from '../dtos/coupons/create-coupon-book.dto';
+import { AssignCouponDto } from '../dtos/coupons/assign-coupon.dto';
 
 @Injectable()
 export class CouponsService {
