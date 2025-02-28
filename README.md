@@ -16,7 +16,7 @@ The service is deployed on AWS using the following components:
 
 *(A detailed architecture diagram is provided below.)*
 
-![AWS Architecture Diagram](https://imgur.com/a/zqxfDhB)
+![AWS Architecture Diagram](https://imgur.com/SZnvjsy)
 ---
 
 ## High Level Database Design
