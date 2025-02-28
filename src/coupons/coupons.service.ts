@@ -6,6 +6,7 @@ import { Coupon, CouponStatus } from '../entities/coupons/coupon.entity';
 import { User } from '../entities/common/user.entity';
 import { CreateCouponBookRequestDto } from '../dtos/coupons/create-coupon-book-request.dto';
 import { AssignCouponRequestDto } from '../dtos/coupons/assign-coupon-request.dto';
+import { AssignCouponResponseDto } from '../dtos/coupons/assign-coupon-response.dto';
 
 @Injectable()
 export class CouponsService {
@@ -16,20 +17,31 @@ export class CouponsService {
     private couponRepository: Repository<Coupon>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
-  ) { }
+  ) {}
+
+  // Helper method to map a Coupon entity to the response DTO
+  private mapCouponToDto(coupon: Coupon): AssignCouponResponseDto {
+    return {
+      id: coupon.id,
+      code: coupon.code,
+      status: coupon.status,
+      user: coupon.user ? coupon.user.id : null,
+      createdAt: coupon.createdAt,
+    };
+  }
 
   async createCouponBook(dto: CreateCouponBookRequestDto): Promise<CouponBook> {
     const couponBook = this.couponBookRepository.create(dto);
     return this.couponBookRepository.save(couponBook);
   }
 
-  async uploadCodes(couponBookId: string, codes: string[]): Promise<Coupon[]> {
+  async uploadCodes(couponBookId: string, codes: string[]): Promise<AssignCouponResponseDto[]> {
     // Check for duplicates in the provided codes array
     const uniqueCodes = Array.from(new Set(codes));
     if (uniqueCodes.length !== codes.length) {
       throw new BadRequestException('Duplicate coupon codes found in request.');
     }
-    
+
     const couponBook = await this.couponBookRepository.findOne({ where: { id: couponBookId } });
     if (!couponBook) {
       throw new NotFoundException('Coupon book not found');
@@ -53,11 +65,11 @@ export class CouponsService {
         status: CouponStatus.AVAILABLE,
       }),
     );
-
-    return this.couponRepository.save(coupons);
+    const savedCoupons = await this.couponRepository.save(coupons);
+    return savedCoupons.map(coupon => this.mapCouponToDto(coupon));
   }
 
-  async assignRandomCoupon(dto: AssignCouponRequestDto): Promise<Coupon> {
+  async assignRandomCoupon(dto: AssignCouponRequestDto): Promise<AssignCouponResponseDto> {
     const couponBook = await this.couponBookRepository.findOne({ where: { id: dto.couponBookId } });
     if (!couponBook) {
       throw new NotFoundException('Coupon book not found');
@@ -79,7 +91,7 @@ export class CouponsService {
     }
 
     const coupon = await this.couponRepository.findOne({
-      where: { couponBook, status: CouponStatus.AVAILABLE },
+      where: { couponBook: { id: couponBook.id }, status: CouponStatus.AVAILABLE },
     });
     if (!coupon) {
       throw new NotFoundException('No available coupon');
@@ -87,15 +99,17 @@ export class CouponsService {
 
     coupon.user = user;
     coupon.status = CouponStatus.ASSIGNED;
-    return this.couponRepository.save(coupon);
+    const savedCoupon = await this.couponRepository.save(coupon);
+    return this.mapCouponToDto(savedCoupon);
   }
 
-  async assignSpecificCoupon(code: string, dto: AssignCouponRequestDto): Promise<Coupon> {
+  async assignSpecificCoupon(code: string, dto: AssignCouponRequestDto): Promise<AssignCouponResponseDto> {
     const coupon = await this.couponRepository.findOne({
-      where: {
+      where: { 
         code,
         couponBook: { id: dto.couponBookId }
       },
+      relations: ['couponBook'],
     });
     if (!coupon || coupon.status !== CouponStatus.AVAILABLE) {
       throw new NotFoundException('Coupon not available');
@@ -119,10 +133,11 @@ export class CouponsService {
 
     coupon.user = user;
     coupon.status = CouponStatus.ASSIGNED;
-    return this.couponRepository.save(coupon);
+    const savedCoupon = await this.couponRepository.save(coupon);
+    return this.mapCouponToDto(savedCoupon);
   }
 
-  async lockCoupon(code: string, userId: string, couponBookId: string): Promise<Coupon> {
+  async lockCoupon(code: string, userId: string, couponBookId: string): Promise<AssignCouponResponseDto> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
@@ -138,19 +153,20 @@ export class CouponsService {
       relations: ['user', 'couponBook'],
     });
     if (!coupon) {
-      throw new NotFoundException('Coupon not found or not assigned to the user');
+      throw new NotFoundException('Coupon not found, already locked or not assigned to the user');
     }
 
     coupon.status = CouponStatus.LOCKED;
-    return this.couponRepository.save(coupon);
+    const updatedCoupon = await this.couponRepository.save(coupon);
+    return this.mapCouponToDto(updatedCoupon);
   }
 
-  async redeemCoupon(code: string, userId: string, couponBookId: string): Promise<Coupon> {
+  async redeemCoupon(code: string, userId: string, couponBookId: string): Promise<AssignCouponResponseDto> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
-
+  
     const coupon = await this.couponRepository.findOne({
       where: {
         code,
@@ -161,17 +177,22 @@ export class CouponsService {
       relations: ['user', 'couponBook'],
     });
     if (!coupon) {
-      throw new NotFoundException('Coupon not locked or already redeemed');
+      throw new NotFoundException('Coupon not locked or not found');
     }
-
-    if (!coupon.couponBook.allowMultipleRedemptions) {
-      coupon.status = CouponStatus.REDEEMED;
+  
+    const couponBook = coupon.couponBook;
+    if (couponBook.allowMultipleRedemptions) {
+      if (coupon.redemptionCount + 1 >= couponBook.maxRedemptions) {
+        coupon.redemptionCount++;
+        coupon.status = CouponStatus.REDEEMED;
+      } else {
+        coupon.redemptionCount++;
+      }
     } else {
-      // For multiple redemptions, increment the redemption count and reset status to ASSIGNED
-      coupon.redemptionCount = coupon.redemptionCount + 1;
-      coupon.status = CouponStatus.ASSIGNED;
+      coupon.status = CouponStatus.REDEEMED;
     }
-
-    return this.couponRepository.save(coupon);
+    
+    const updatedCoupon = await this.couponRepository.save(coupon);
+    return this.mapCouponToDto(updatedCoupon);
   }
 }

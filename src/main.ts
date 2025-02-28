@@ -9,8 +9,8 @@ async function bootstrap() {
   await AppDataSource.initialize();
   console.log('Data Source initialized.');
 
-  await AppDataSource.runMigrations();
-  console.log('Migrations executed.');
+  const migrations = await AppDataSource.runMigrations();
+  console.log('Migrations executed:', migrations.map(({ name }) => name));
 
   // Create the NestJS app
   const app = await NestFactory.create(AppModule);

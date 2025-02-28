@@ -23,6 +23,14 @@ export class CreateCouponBookRequestDto {
   allowMultipleRedemptions?: boolean;
 
   @ApiProperty({
+    description: 'Maximum number of redemptions per user',
+    example: 5,
+    required: false,
+    default: 1
+  })
+  maxRedemptions: number;
+
+  @ApiProperty({
     description: 'Maximum number of coupon codes allowed per user',
     example: 5,
     required: false,

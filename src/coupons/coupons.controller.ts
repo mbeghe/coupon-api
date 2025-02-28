@@ -1,5 +1,5 @@
 import { Controller, Post, Body, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 import { CouponsService } from './coupons.service';
 import { CreateCouponBookRequestDto } from '../dtos/coupons/create-coupon-book-request.dto';
 import { AssignCouponRequestDto } from '../dtos/coupons/assign-coupon-request.dto';
@@ -31,6 +31,16 @@ export class CouponsController {
     type: [AssignCouponResponseDto],
   })
   @ApiResponse({ status: 404, description: 'Coupon book not found' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        couponBookId: { type: 'string', example: 'f2c7a5f4-dfa7-48c7-8a0f-123456789abc' },
+        codes: { type: 'array', items: { type: 'string' }, example: ['CODE1', 'CODE2'] },
+      },
+      required: ['couponBookId', 'codes'],
+    },
+  })
   uploadCodes(@Body() body: { couponBookId: string; codes: string[] }) {
     return this.couponsService.uploadCodes(body.couponBookId, body.codes);
   }

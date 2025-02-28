@@ -18,6 +18,9 @@ export class CouponBook {
   @Column({ nullable: true })
   maxCodesPerUser?: number;
 
+  @Column({ type: 'int', default: 1 })
+  maxRedemptions: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

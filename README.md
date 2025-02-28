@@ -1,99 +1,186 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Coupon Book Service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+This project implements a Coupon Book Service that enables businesses to create coupon books, upload coupon codes, assign coupons to users, and manage coupon redemptions. The service is designed for scalability and high availability using modern cloud technologies.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## High Level System Architecture
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+The service is deployed on AWS using the following components:
 
-## Project setup
+- **Amazon VPC:** The entire system runs inside a Virtual Private Cloud, providing network isolation and security.
+- **Application Load Balancer (ALB):** Publicly accessible, the ALB routes incoming HTTP/HTTPS requests to the backend services.
+- **ECS Fargate:** The Coupon Book Service is containerized and runs on AWS Fargate, enabling scalable and serverless container management.
+- **Amazon RDS (PostgreSQL):** The service stores data in an RDS PostgreSQL database. The database supports migrations to manage schema changes over time.
+- **Additional Services:** The architecture can be extended with an API Gateway, monitoring, logging, and CI/CD pipelines for automated deployments.
 
-```bash
-$ npm install
+*(A detailed architecture diagram is provided below.)*
+
+![AWS Architecture Diagram](https://imgur.com/a/zqxfDhB)
+---
+
+## High Level Database Design
+
+The database follows a relational design with the following key entities:
+
+- **CouponBook:** Represents a collection of coupons. It includes properties such as `name`, `description`, `allowMultipleRedemptions`, `maxCodesPerUser`, and a `maxRedemptions` field (defining the maximum number of redemptions allowed per coupon when multiple redemptions are enabled).
+- **Coupon:** Represents individual coupons. Coupons are linked to a CouponBook and can be assigned to a User. A composite unique constraint ensures that the same code can exist in different coupon books. The entity also includes a `redemptionCount` to track the number of times it has been redeemed, and a `status` (with values like `AVAILABLE`, `ASSIGNED`, `LOCKED`, and `REDEEMED`).
+- **User:** Represents the end user who can be assigned coupons. A user may have multiple coupons.
+
+---
+
+## API Endpoints
+
+The API is RESTful and exposes the following endpoints:
+
+- **POST /coupons**  
+  _Create a new coupon book_  
+  **Request:** JSON object with coupon book details (name, description, allowMultipleRedemptions, maxCodesPerUser, maxRedemptions).  
+  **Response:** The created coupon book.
+
+- **POST /coupons/codes**  
+  _Upload a code list to an existing coupon book_  
+  **Request:** JSON object with `couponBookId` and an array of coupon codes.  
+  **Response:** An array of created coupon objects.
+
+- **POST /coupons/assign**  
+  _Assign a new random coupon code to a user_  
+  **Request:** JSON object with `couponBookId` and `userId`.  
+  **Response:** The assigned coupon.
+
+- **POST /coupons/assign/{code}**  
+  _Assign a given coupon code to a user_  
+  **Request:** Path parameter `code` and JSON object with `couponBookId` and `userId`.  
+  **Response:** The assigned coupon.
+
+- **POST /coupons/lock/{code}**  
+  _Lock a coupon for redemption_  
+  **Request:** Path parameter `code` and JSON object with `couponBookId` and `userId`.  
+  **Response:** The locked coupon.
+
+- **POST /coupons/redeem/{code}**  
+  _Redeem a coupon_  
+  **Request:** Path parameter `code` and JSON object with `couponBookId` and `userId`.  
+  **Response:** The redeemed coupon (with updated redemptionCount and status).
+
+All endpoints are documented using Swagger. Detailed request and response schemas are available in the Swagger UI at:  
+**http://localhost:3000/api**
+
+---
+
+## Pseudocode for Key Operations
+
+### Assign a Coupon to a User
+
+```
+function assignCoupon(couponBookId, userId):
+    couponBook = find CouponBook by couponBookId
+    if couponBook not found:
+        throw error
+    user = find User by userId
+    if user not found:
+        throw error
+    if couponBook.maxCodesPerUser defined:
+        count = count coupons assigned to user in couponBook
+        if count >= couponBook.maxCodesPerUser:
+            throw error "Max coupons reached"
+    coupon = find one available coupon in couponBook
+    if coupon not found:
+        throw error "No available coupon"
+    coupon.user = user
+    coupon.status = ASSIGNED
+    save coupon
+    return coupon
 ```
 
-## Compile and run the project
+### Lock a Coupon for Redemption
 
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```
+function lockCoupon(code, couponBookId, userId):
+    coupon = find coupon by code, couponBookId, userId, and status ASSIGNED
+    if coupon not found:
+        throw error
+    coupon.status = LOCKED
+    save coupon
+    return coupon
 ```
 
-## Run tests
+### Redeem a Coupon
 
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```
+function redeemCoupon(code, couponBookId, userId):
+    coupon = find coupon by code, couponBookId, userId, and status LOCKED
+    if coupon not found:
+        throw error
+    if couponBook.allowMultipleRedemptions is true:
+        if coupon.redemptionCount + 1 >= couponBook.maxRedemptions:
+            coupon.redemptionCount++
+            coupon.status = REDEEMED  // Last allowed redemption
+        else:
+            coupon.redemptionCount++
+            // Remains LOCKED for further redemptions
+    else:
+        coupon.status = REDEEMED
+    save coupon
+    return coupon
 ```
 
-## Deployment
+---
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## High-Level Deployment Strategy
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+**Cloud Platform:**  
+Deploy on AWS using services such as ECS Fargate for containerized microservices, Amazon RDS for PostgreSQL, and an Application Load Balancer (ALB) to route traffic. Optionally, use an API Gateway for more advanced routing and security.
 
-```bash
-$ npm install -g mau
-$ mau deploy
-```
+**CI/CD Pipeline:**  
+- **Code Repository:** GitHub or GitLab.  
+- **Build & Test:** Use AWS CodeBuild or GitHub Actions to build and test the Docker images.  
+- **Deployment:** Deploy using AWS ECS (Fargate) with AWS CodeDeploy or AWS CodePipeline.  
+- **Monitoring:** Leverage CloudWatch for logs and performance monitoring.
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+**Scalability & Availability:**  
+- Auto-scaling ECS tasks based on load.  
+- Multi-AZ deployments for RDS to ensure high availability.  
+- Use an ALB to distribute incoming traffic and handle failover.
 
-## Resources
+---
 
-Check out a few resources that may come in handy when working with NestJS:
+## Local Testing
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+### System Requirements
 
-## Support
+- **Docker:** Version 20+  
+- **Docker Compose:** Version 1.27+  
+- **Environment:** A recent version of Node.js (for local development, though Docker handles runtime)
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+### Steps to Run Locally
 
-## Stay in touch
+1. **Clone the Repository:**  
+   ```bash
+   git clone <repository_url>
+   cd coupon-api
+   ```
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+2. **Create an .env File:**  
+   Place an `.env` file in the root directory with the following (example) values:
+   ```env
+   DB_HOST=coupons-db
+   DB_PORT=5432
+   DB_USER=admin
+   DB_PASSWORD=admin
+   DB_NAME=coupons-service
+   PORT=3000
+   ```
 
-## License
+3. **Launch the Stack:**  
+   Run Docker Compose to build and start both the database and application containers:
+   ```bash
+   docker-compose up --build
+   ```
+   This will build your NestJS app, start PostgreSQL with migrations, and expose the API on port 3000.
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+4. **Access Swagger Documentation:**  
+   Open your browser and navigate to [http://localhost:3000/api](http://localhost:3000/api) to test the endpoints using the interactive Swagger UI.
+
+5. **Database Migrations:**  
+   The PostgreSQL container supports migrations; these are automatically applied on application startup.
