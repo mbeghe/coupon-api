@@ -27,6 +27,10 @@ The database follows a relational design with the following key entities:
 - **Coupon:** Represents individual coupons. Coupons are linked to a CouponBook and can be assigned to a User. A composite unique constraint ensures that the same code can exist in different coupon books. The entity also includes a `redemptionCount` to track the number of times it has been redeemed, and a `status` (with values like `AVAILABLE`, `ASSIGNED`, `LOCKED`, and `REDEEMED`).
 - **User:** Represents the end user who can be assigned coupons. A user may have multiple coupons.
 
+
+*(An ER diagram is provided below.)*
+![ER Diagram](https://imgur.com/n5aocq1.jpg)
+
 ---
 
 ## API Endpoints
